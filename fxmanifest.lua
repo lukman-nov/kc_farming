@@ -8,7 +8,6 @@ lua54 'yes'
 version '1.0.0'
 
 shared_scripts {
-	'@ox_lib/init.lua',
 	'@es_extended/locale.lua',
 	'locales/*.lua'
 }
@@ -24,5 +23,5 @@ client_scripts {
 }
 
 dependencies {
-  'ox_lib'
+  'ox_target'
 }
