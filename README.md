@@ -24,8 +24,6 @@ ESX
 4) Edit config `kc_farming` jika kalian butuhkan untuk menyesuaikan dengan keadaan server kalian di `kc_mining/config.lua`.
 5) Tambahkan `start kc_farming` kedalam server config kalian.
 
-### Resmon
-
 ### Community
 > Discord server : https://discord.gg/BuACxn4XUw
 
