@@ -11,6 +11,14 @@ CreateThread(function()
   PlayerData = ESX.GetPlayerData()
 end)
 
+function clientNotif(type, msg)
+  if Config.UseMythicNotify then
+    exports['mythic_notify']:DoHudText(type, msg)
+  else
+    ESX.ShowNotification(msg)
+  end
+end
+
 function spawnProps(curentJob)
   if spawnedFarms < 20 then
     local modelHash = Config.Prop
@@ -51,7 +59,7 @@ AddEventHandler('kc_farming:getJob', function()
         TriggerEvent('kc_farming:startFarming', jobs)
       end
     end
-    exports['mythic_notify']:DoHudText('inform', 'Kamu sudah mengambil pekerjaan '..jobs)
+    clientNotif('inform', _U('have_job'), jobs)
   end
 end)
 
@@ -62,13 +70,13 @@ AddEventHandler('kc_farming:leaveJob', function()
       local prop = GetClosestObjectOfType(v.pos, 10.0, GetHashKey(Config.Prop), false, 0, 0)
       DeleteEntity(prop)
     end
-    exports['mythic_notify']:DoHudText('inform', 'Kamu sudah menyelesaikan pekerjaan '..jobs)
+    clientNotif('inform', _U('finish_job'), jobs)
     exports.ox_target:removeModel(Config.Prop, 'harvest')
     spawnedFarms = 0
     jobs = nil
     duty = false
   else
-    exports['mythic_notify']:DoHudText('inform', 'Kamu tidak memiliki pekerjaan apapun')
+    clientNotif('inform', _U('not_job'))
   end
 end)
 
@@ -76,7 +84,7 @@ RegisterNetEvent('kc_farming:farmingProgress')
 AddEventHandler('kc_farming:farmingProgress', function(curentJob)
   exports['mythic_progbar']:Progress({
     duration = Config.Duration,
-    label = 'Memanen '..curentJob,
+    label = _U('harvest', curentJob),
     useWhileDead = false,
     canCancel = false,
     controlDisables = {
@@ -108,7 +116,7 @@ AddEventHandler('kc_farming:startFarming', function(curentJob)
       {
         name = 'harvest',
         icon = "fa-solid fa-hand",
-        label = 'Memanen '..curentJob,
+        label = _U('harvest', curentJob),
         onSelect = function()
           TriggerEvent('kc_farming:farmingProgress', curentJob)
         end,
@@ -133,13 +141,13 @@ CreateThread(function()
     {
       name = 'onduty',
       icon = 'fa-solid fa-file-pen',
-      label = 'Mengambil Pekerjaan',
+      label = _U('get_job'),
       event = 'kc_farming:getJob',
     },
     {
       name = 'offduty',
       icon = 'fa-solid fa-file-pen',
-      label = 'Selesaikan Pekerjaan',
+      label = _U('end_job'),
       event = 'kc_farming:leaveJob',
     },
   })
@@ -160,7 +168,7 @@ CreateThread(function()
     SetBlipScale  (blip, Config.Blips.Scale)
     SetBlipAsShortRange(blip, true)
     BeginTextCommandSetBlipName('STRING')
-    AddTextComponentSubstringPlayerName('Lahan ' ..v.job)
+    AddTextComponentSubstringPlayerName(_U('land', v.job))
     EndTextCommandSetBlipName(blip)
   end
 end)

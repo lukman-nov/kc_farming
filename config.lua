@@ -1,5 +1,6 @@
 Config                 = {}
 Config.Locale          = GetConvar('esx:locale', 'en')
+Config.UseMythicNotify = true
 Config.Prop            = 'prop_veg_crop_04_leaf'
 Config.Duration        = 5000
 Config.HarvestCount    = 2
