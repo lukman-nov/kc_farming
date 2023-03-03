@@ -5,7 +5,7 @@ game 'gta5'
 author 'Lukman_Nov#5797'
 description 'Farming Sidejob'
 lua54 'yes'
-version '1.0.0'
+version '1.0.1'
 
 shared_scripts {
 	'@es_extended/locale.lua',
@@ -20,8 +20,4 @@ server_scripts {
 client_scripts {
 	'client/main.lua',
 	'config.lua',
-}
-
-dependencies {
-  'ox_target'
 }

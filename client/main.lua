@@ -11,22 +11,15 @@ CreateThread(function()
   PlayerData = ESX.GetPlayerData()
 end)
 
-function clientNotif(type, msg)
-  if Config.UseMythicNotify then
-    exports['mythic_notify']:DoHudText(type, msg)
-  else
-    ESX.ShowNotification(msg)
-  end
-end
-
 function spawnProps(curentJob)
   if spawnedFarms < 20 then
     local modelHash = Config.Prop
     for k, v in pairs(Config.PropZones[curentJob]) do
-      local prop = GetClosestObjectOfType(v.pos, 5.0, GetHashKey(modelHash), false, 0, 0)
+      local prop = GetClosestObjectOfType(v.pos, 3.0, GetHashKey(modelHash), false, 0, 0)
       if prop == 0 then
         ESX.Game.SpawnObject(modelHash, v.pos, function(obj)
           PlaceObjectOnGroundProperly(obj)
+          Wait(200)
           FreezeEntityPosition(obj, true)
           spawnedFarms = spawnedFarms + 1
         end)
@@ -47,10 +40,18 @@ function spawnNPC(x, y, z, heading, hash, model)
   SetBlockingOfNonTemporaryEvents(ped, true)
 end
 
+RegisterNetEvent('kc_farming:notify')
+AddEventHandler('kc_farming:notify', function(type, msg)
+  if Config.UseMythicNotify then
+    exports['mythic_notify']:DoHudText(type, msg)
+  else
+    ESX.ShowNotification(msg)
+  end
+end)
 RegisterNetEvent('kc_farming:getJob')
 AddEventHandler('kc_farming:getJob', function()
   if jobs == nil and not duty then
-    local coords = GetEntityCoords(PlayerPedId())
+    local coords = GetEntityCoords(GetPlayerPed(-1))
 
     for k, v in pairs(Config.Zones) do
       if #(coords - v.loc) < 10.0 then
@@ -59,7 +60,7 @@ AddEventHandler('kc_farming:getJob', function()
         TriggerEvent('kc_farming:startFarming', jobs)
       end
     end
-    clientNotif('inform', _U('have_job'), jobs)
+    TriggerEvent('kc_farming:notify', 'inform', _U('have_job', jobs))
   end
 end)
 
@@ -70,13 +71,13 @@ AddEventHandler('kc_farming:leaveJob', function()
       local prop = GetClosestObjectOfType(v.pos, 10.0, GetHashKey(Config.Prop), false, 0, 0)
       DeleteEntity(prop)
     end
-    clientNotif('inform', _U('finish_job'), jobs)
+    TriggerEvent('kc_farming:notify', 'inform', _U('finish_job', jobs))
     exports.ox_target:removeModel(Config.Prop, 'harvest')
     spawnedFarms = 0
     jobs = nil
     duty = false
   else
-    clientNotif('inform', _U('not_job'))
+    TriggerEvent('kc_farming:notify', 'error', _U('not_job'))
   end
 end)
 
@@ -100,7 +101,7 @@ AddEventHandler('kc_farming:farmingProgress', function(curentJob)
   }, function(status)
     if not status then
       TriggerServerEvent('kc_farming:harvest', curentJob)
-      local playerLoc = GetEntityCoords(PlayerPedId())
+      local playerLoc = GetEntityCoords(GetPlayerPed(-1))
       local prop = GetClosestObjectOfType(playerLoc, 5.0, GetHashKey(Config.Prop), false, 0, 0)
       DeleteEntity(prop)
       spawnedFarms = spawnedFarms - 1
