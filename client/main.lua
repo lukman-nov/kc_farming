@@ -2,6 +2,7 @@ local ESX, jobs = nil, nil
 local PlayerData = {}
 local duty = false
 local spawnedFarms = 0
+local prop = {}
 
 CreateThread(function()
 	while ESX == nil do
@@ -12,20 +13,24 @@ CreateThread(function()
 end)
 
 function spawnProps(curentJob)
-  if spawnedFarms < 20 then
-    local modelHash = Config.Prop
-    for k, v in pairs(Config.PropZones[curentJob]) do
-      local prop = GetClosestObjectOfType(v.pos, 3.0, GetHashKey(modelHash), false, 0, 0)
-      if prop == 0 then
-        ESX.Game.SpawnObject(modelHash, v.pos, function(obj)
-          PlaceObjectOnGroundProperly(obj)
-          Wait(200)
-          FreezeEntityPosition(obj, true)
+  CreateThread(function()
+    while true do 
+      Wait(300)
+      if duty and spawnedFarms < 20 then
+        local modelHash = Config.Prop
+        local radius = 15
+        local x = Config.PropZones[curentJob].x + math.random(-radius, radius)
+        local y = Config.PropZones[curentJob].y + math.random(-radius, radius)
+        local z = Config.PropZones[curentJob].z
+        for i = 1, 20 do
+          prop[i] = CreateObject(modelHash, vector3(x, y, z), true, false)
+          PlaceObjectOnGroundProperly(prop[i])
+          FreezeEntityPosition(prop[i], true)
           spawnedFarms = spawnedFarms + 1
-        end)
+        end
       end
     end
-  end
+  end)
 end
 
 function spawnNPC(x, y, z, heading, hash, model)
@@ -68,8 +73,9 @@ RegisterNetEvent('kc_farming:leaveJob')
 AddEventHandler('kc_farming:leaveJob', function()
   if jobs and duty then
     for k,v in pairs(Config.PropZones[jobs]) do
-      local prop = GetClosestObjectOfType(v.pos, 10.0, GetHashKey(Config.Prop), false, 0, 0)
-      DeleteEntity(prop)
+      for i = 1, 10 do
+        DeleteEntity(prop[i])
+      end
     end
     TriggerEvent('kc_farming:notify', 'inform', _U('finish_job', jobs))
     exports.ox_target:removeModel(Config.Prop, 'harvest')
@@ -123,17 +129,6 @@ AddEventHandler('kc_farming:startFarming', function(curentJob)
         end,
       }
     })
-  end
-end)
-
-CreateThread(function()
-  while true do 
-    local Sleep = 2000
-    if jobs then
-      Sleep = 100000
-      spawnProps(jobs)
-    end
-    Wait(Sleep)
   end
 end)
 
