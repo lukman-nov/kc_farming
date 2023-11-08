@@ -1,19 +1,11 @@
-local ESX = nil
 local Duty = false
-local IsDead = false
 local Seeds = {}
 local propCount = 0
+local inSideZone = false
+local onProgress = false
 
 Citizen.CreateThread(function()
-	while ESX == nil do
-		ESX = exports["es_extended"]:getSharedObject()
-		Citizen.Wait(10)
-	end 
-  ESX.PlayerData = ESX.GetPlayerData()
-end)
-
-Citizen.CreateThread(function()
-  for k, v in pairs(Config.TargetZones) do
+  for k, v in pairs(Config.WaterZone) do
     exports.ox_target:addBoxZone({
       coords = v.Coords,
       size = v.Size,
@@ -23,74 +15,134 @@ Citizen.CreateThread(function()
           name = k,
           event = 'kc_farming:getWater',
           icon = 'fa-solid fa-glass-water-droplet',
-          label = 'Mengisi Air',
+          label = _K('refuel_water'),
         }
       }
     })
   end
-  
-  exports.ox_target:addBoxZone({
-    coords = vec3(2541.0620, 4810.0405, 33.6945),
-    size = vec3(45, 70, 20),
-    rotation = 225,
-    options = {
-      {
-        name = 'plantProps',
-        event = 'kc_farming:showSeedsMenu',
-        icon = 'fa-brands fa-pagelines',
-        label = 'Mulai Menanam',
-        canInteract = function(entity, distance, coords, name, bone)
-          return canTargetingZone(coords)
-        end
-      }
-    }
-  })
-end)
 
-function canTargetingZone(coords)
-  local canPlant = false
-  local object, dist = ESX.Game.GetClosestObject(coords)
-  if Duty and dist > 2.0 then
-    canPlant = true
-  end
-  return canPlant
-end
+  for k, v in pairs(Config.FarmZone) do
+    local box = lib.zones.box({
+      coords = v.Coords,
+      size = v.Size,
+      rotation = v.Rot,
+      debug = false,
+      inside = inside,
+      onEnter = onEnter,
+      onExit = onExit
+    })
 
-Citizen.CreateThread(function()
-  local blip = AddBlipForCoord(vector3(2541.0620, 4810.0405, 33.6945))
-  SetBlipSprite (blip, Config.Blips.Sprite)
-  SetBlipColour (blip, Config.Blips.Color)
-  SetBlipDisplay(blip, Config.Blips.Display)
-  SetBlipScale  (blip, Config.Blips.Scale)
-  SetBlipAsShortRange(blip, true)
-  BeginTextCommandSetBlipName('STRING')
-  AddTextComponentSubstringPlayerName('Pertanian')
-  EndTextCommandSetBlipName(blip)
-end)
-
-AddEventHandler('esx:onPlayerDeath', function(data)
-  IsDead = true
-end)
-
-AddEventHandler('playerSpawned', function(spawn)
-  IsDead = false
-end)
-
-RegisterNetEvent('esx:playerLoaded')
-AddEventHandler('esx:playerLoaded',function(xPlayer)
-  ESX.PlayerData = xPlayer
-  Wait(3000)
-  TriggerServerEvent('kc_farming:getDataServer')
-end)
-
-RegisterNetEvent('kc_farming:getDataClient')
-RegisterNetEvent('kc_farming:getDataClient', function(data)
-  if data[1] ~= nil then
-    Duty = true
-    Seeds = data
-    for k, v in pairs(Seeds) do
-      SpawnProps(v[1].entity, v[1].name)
+    function onEnter(self)
+      lib.showTextUI(_K('farm_zone'), {
+        position = "right-center",
+        icon = "wheat-awn",
+        style = {
+          borderRadius = 5,
+          backgroundColor = '#3d85c6',
+          color = 'white'
+        }
+      })
+      inSideZone = true
     end
+    
+    function onExit(self)
+      lib.hideTextUI()
+      inSideZone = false
+    end
+    
+    local blips = AddBlipForCoord(v.Coords)
+    SetBlipSprite (blips, 88)
+    SetBlipColour (blips, 69)
+    SetBlipDisplay(blips, 4)
+    SetBlipScale  (blips, 0.8)
+    SetBlipAsShortRange(blips, true)
+    BeginTextCommandSetBlipName('STRING')
+    AddTextComponentSubstringPlayerName(_K('farm_zone'))
+    EndTextCommandSetBlipName(blips)
+  end
+
+  for k, v in pairs(Config.Shops) do
+    local blips = AddBlipForCoord(v.Coords)
+    SetBlipSprite (blips, 628)
+    SetBlipColour (blips, 69)
+    SetBlipDisplay(blips, 4)
+    SetBlipScale  (blips, 0.8)
+    SetBlipAsShortRange(blips, true)
+    BeginTextCommandSetBlipName('STRING')
+    AddTextComponentSubstringPlayerName(v.Label)
+    EndTextCommandSetBlipName(blips)
+
+    local hash = GetHashKey(v.Model)
+    RequestModel(hash)
+    while not HasModelLoaded(hash) do
+      Wait(15)
+    end
+    local ped = CreatePed(4, hash, v.Coords.x, v.Coords.y, v.Coords.z - 1, 3374176, false, true)
+    SetEntityHeading(ped, v.Heading)
+    FreezeEntityPosition(ped, true)
+    SetEntityInvincible(ped, true)
+    SetBlockingOfNonTemporaryEvents(ped, true)
+
+    if DoesEntityExist(ped) then
+      exports.ox_target:addModel(hash, {
+        {
+          name = k,
+          label = v.Label,
+          icon = 'fa-solid fa-hand',
+          onSelect = function()
+            exports.ox_inventory:openInventory('shop',  { id = 1, type = k })
+          end
+        }
+      })
+    end
+  end
+end)
+
+RegisterNetEvent('kc_farming:clientReconnect')
+AddEventHandler('kc_farming:clientReconnect', function(data)
+  for k, v in pairs(data) do
+    local hash = GetHashKey(Config.Items[v.name].prop)
+
+    RequestModel(hash)
+    while not HasModelLoaded(hash) do
+      Wait(1)
+    end
+
+    ServerCallback('kc_farming:planting', function(netId)
+      local object = NetworkGetEntityFromNetworkId(netId)
+      if DoesEntityExist(object) then
+        PlaceObjectOnGroundProperly(object)
+        FreezeEntityPosition(object, true)
+        local netId = ObjToNet(object)
+    
+        Seeds[object] = {
+          netIds = netId,
+          coords = v.coords,
+          name = v.name,
+          harvest = v.harvest,
+          watering = v.watering,
+          fertilizer = v.fertilizer,
+          time = v.time
+        }
+    
+        exports.ox_target:addEntity(netId, {
+          {
+            name = 'checkPlant',
+            icon = "fa-solid fa-clipboard",
+            label = _K('check_plant'),
+            event = 'kc_farming:checkTanaman',
+            args = {
+              entity = object
+            },
+            canInteract = function(entity, distance, coords, name, bone)
+              if #(data.coords - coords) < 10 then return true end  
+            end
+          }
+        })
+        TriggerServerEvent('kc_farming:saveEntity', Seeds)
+        HasPlanting(object)
+      end
+    end, hash, data.coords)
   end
 end)
 
@@ -105,205 +157,164 @@ AddEventHandler('kc_farming:notify', function(_type, msg, title, time)
     exports['okokNotify']:Alert(title, msg , time, _type)
   elseif Config.Notify == 'lib' then
     lib.notify({ title = title, description = msg, duration = time, type = _type })
-  elseif Config.Notify == 'ESX' then
-    ESX.ShowNotification(msg, _type)
-  end
-end)
-
-RegisterNetEvent('kc_farming:duty')
-AddEventHandler('kc_farming:duty', function()
-  if not Duty then
-    Duty = true
-    TriggerEvent('kc_farming:notify', 'success', 'Kamu sudah mengambil pekerjaan bertani', 'SUCCESS', 10000)
-  else
-    TriggerEvent('kc_lumberjack:notify', 'info', 'Kamu sudah mengambil pekerjaan ini', 'INFO', 6000)
+  elseif Config.Notify == 'default' then
+    Notify(msg, _type, time)
   end
 end)
 
 RegisterNetEvent('kc_farming:getWater')
 AddEventHandler('kc_farming:getWater', function()
-  ESX.TriggerServerCallback('kc_farming:checkItem', function(hasItem)
+  ServerCallback('kc_farming:checkItem', function(hasItem)
     if hasItem then
-      TriggerServerEvent('kc_farming:removeItem', 'watering_can', 1)
-      exports['mythic_progbar']:Progress({
-        duration = 3500,
-        label = 'Mengisi Air',
+      
+      local hash = 'prop_wateringcan'
+      local ped = PlayerPedId()
+
+      RequestModel(hash)
+      while not HasModelLoaded(hash) do
+        Wait(1)
+      end
+      
+      local x, y, z = table.unpack(GetEntityCoords(ped))
+      local prop = CreateObject(hash, x+0.4, y+0.4, z, true, false, true)
+      FreezeEntityPosition(prop, true)
+      PlaceObjectOnGroundProperly(prop)
+      SetPedCurrentWeaponVisible(PlayerPedId(), 0, 1, 1, 1)
+      local px, py, pz = table.unpack(GetEntityCoords(prop))
+      TaskTurnPedToFaceCoord(ped, vector3(px, py, pz), 20 * 1000)
+      Wait(1000)
+      
+      local progressStatus = lib.progressBar({
+        duration = 15 * 1000,
+        label = _K('refuel_water'),
         useWhileDead = false,
         canCancel = false,
-        controlDisables = {
-          disableMovement = true,
-          disableCarMovement = true,
-          disableMouse = false,
-          disableCombat = true,
+        disable = {
+          car = true,
+          move = true,
+          combat = true
         },
-        animation = {
-          animDict = "anim@amb@business@weed@weed_inspecting_lo_med_hi@",
-          anim = "weed_spraybottle_crouch_base_inspector",
-          flags = 9,
-        }
-      }, function(status)
-        if not status then
-          TriggerServerEvent('kc_farming:giveItem', 'watering_can_full', 1)
-        end
-      end)
+        anim = {
+          dict = "anim@amb@business@weed@weed_inspecting_lo_med_hi@",
+          clip = "weed_spraybottle_crouch_base_inspector",
+          flag = 9,
+        },
+      })
+      
+      if progressStatus then
+        DeleteEntity(prop)
+        TriggerServerEvent('kc_farming:setDurability', 'watering_can', 100)
+      end
     else
-      TriggerEvent('kc_farming:notify', 'error', 'Kamu tidak mempunyai KALENG AIR', 'ERROR', 5000)
+      TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', "Kaleng Air"), 'ERROR', 5000)
     end
   end, 'watering_can', 1)
 end)
 
-RegisterNetEvent('kc_farming:showSeedsMenu')
-AddEventHandler('kc_farming:showSeedsMenu', function(target)
-  local seedList = {}
-
-  ESX.TriggerServerCallback('kc_farming:getItems', function(data)
-    if data and data[1] ~= nil then
-      for k, v in pairs(data) do
-        local disable = true
-        if v.count >= 1 then
-          seedList[v.label] = {
-            description = 'Kamu mempunyai '..v.count,
-            event = 'kc_farming:planting',
-            args = {
-              coords = target.coords,
-              seed = v.name,
-            }
-          }
-
-          lib.registerContext({
-            id = 'Get_Jobs',
-            title = 'Elite Farming',
-            options = seedList
-          })
-          lib.showContext('Get_Jobs')
-        end
-      end
-    else
-      TriggerEvent('kc_farming:notify', 'error', 'Kamu tidak mempunyai Bibit Tanaman', 'ERROR', 5000)
-    end
-  end)
+RegisterNetEvent('kc_farming:duty')
+AddEventHandler('kc_farming:duty', function()
+  Duty = not Duty
 end)
 
 RegisterNetEvent('kc_farming:planting')
 AddEventHandler('kc_farming:planting', function(data)
-  local playerCoords = GetEntityCoords(PlayerPedId())
-  local x = playerCoords.x + 0.5
-  local y = playerCoords.x + 0.5
-  local z = playerCoords.x
-  ESX.TriggerServerCallback('kc_farming:checkItem', function(hasItem)
-    if hasItem then
-      TriggerServerEvent('kc_farming:removeItem', data.seed, 1)
-      exports['mythic_progbar']:Progress({
-        duration = 7000,
-        label = 'Menanam',
-        useWhileDead = false,
-        canCancel = false,
-        controlDisables = {
-          disableMovement = true,
-          disableCarMovement = true,
-          disableMouse = false,
-          disableCombat = true,
-        },
-        animation = {
-          task = 'WORLD_HUMAN_GARDENER_PLANT'
-        }
-      }, function(status)
-        if not status then
-          Citizen.Wait(Config.GrowingPlanting)
-          propCount = propCount + 1
-
-          ESX.Game.SpawnObject(Config.Items[data.seed].prop, data.coords, function(object)
-            PlaceObjectOnGroundProperly(object)
-            FreezeEntityPosition(object, true)
-            Seeds[tostring(propCount)] = {
-              {
-                entity = object,
-                coords = data.coords,
-                name = data.seed,
-                harvest = false,
-                watering = 0,
-                fertilizer = 0,
-                time = 3 * 60 * 1000
-              }
-            }
-            exports.ox_target:addLocalEntity(object, {
-              {
-                name = 'pupukin',
-                icon = "fa-solid fa-clipboard",
-                label = 'Memeriksa Tanaman',
-                event = 'kc_farming:checkTanaman',
-                args = object
-              }
-            })
-
-            TriggerServerEvent('kc_farming:saveEntity', Seeds)
-            HasPlanting(object)
-          end)
+  if onProgress then return end
+  if not inSideZone then return TriggerEvent('kc_farming:notify', 'error', _K('not_in_zone'), 'ERROR', 5000) end
+  data.coords = data.coords + GetEntityForwardVector(PlayerPedId())
+  if not canTargetingZone(data.coords, GetHashKey(Config.Items[data.seed].prop)) then return TriggerEvent('kc_farming:notify', 'error', _K('to_close'), 'ERROR', 5000) end
+  Citizen.CreateThread(function()
+    ServerCallback('kc_farming:checkItem', function(hasItem)
+      if hasItem then
+        onProgress = true
+        TriggerServerEvent('kc_farming:removeItem', data.seed, 1)
+        
+        local progressStatus = lib.progressBar({
+          duration = 5000,
+          label = _K('planting'),
+          useWhileDead = false,
+          canCancel = false,
+          disable = {
+            car = true,
+            move = true,
+            combat = true
+          },
+          anim = {
+            scenario = 'WORLD_HUMAN_GARDENER_PLANT'
+          },
+        })
+        
+        if progressStatus then
+          Wait(2000)
+          Planting(data)
         end
-      end)
-    else
-      TriggerEvent('kc_farming:notify', 'error', 'Kamu tidak mempunyai SEKOP', 'ERROR', 5000)
-    end
-  end, 'sekop', 1)
+      else
+        TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', 'Sekop'), 'ERROR', 5000)
+      end
+    end, 'shovel', 1)
+  end)
 end)
 
 RegisterNetEvent('kc_farming:checkTanaman')
 AddEventHandler('kc_farming:checkTanaman', function(target)
   local propsList = {}
   for k, v in pairs(Seeds) do
-    if target.entity == v[1].entity then
-      local label = 'Tanaman '..v[1].name:gsub('bibit_', '')
+    if target.args.entity == k or target.entity == k then
+      local label = _K('plant', v.name:gsub('_seeds', ''))
 
-      local desc = 'Progress Panen '..toPercent(v[1].time)..'% | '..convertMin(v[1].time)..' menit'
-      if v[1].time < 60000 then
-        desc = 'Progress Panen '..toPercent(v[1].time)..'% | '..convertSec(v[1].time)..' detik'
+      local desc = _K('progress_min', toPercent(v.time), convertMin(v.time))
+      if v.time < 60000 then
+        desc = _K('progress_sec', toPercent(v.time), convertMin(v.time))
       end 
-
-      if v[1].harvest then
-        desc = 'Siap dipanen'
+      
+      if v.harvest then
+        desc = _K('can_harvest')
       end
 
       lib.registerContext({
         id = 'check_plant',
-        title = label..' | '..v[1].entity,
+        title = label..' | '..target.entity,
         options = {
           {
-            title = 'Panen',
+            title = _K('harvest'),
             description = desc,
+            progress = toPercent(v.time),
+            colorScheme = 'teal',
             icon = 'hand',
             event = 'kc_farming:harvest',
             args = {
-              entity = v[1].entity,
-              harvest = v[1].harvest,
-              watering = v[1].watering,
-              fertilizer = v[1].fertilizer,
-              time = v[1].time
+              entity = k,
+              harvest = v.harvest,
+              watering = v.watering,
+              fertilizer = v.fertilizer,
+              time = v.time
             }
           },
           {
-            title = 'Memberikan Pupuk',
+            title = _K('give_fertilizer'),
             icon = 'prescription-bottle-medical',
-            description = 'Pemberian Pupuk '..math.floor(v[1].fertilizer)..'%',
+            description = _K('fertilizer_progress', .math.floor(v.fertilizer)..'%'),
+            progress = math.floor(v.fertilizer),
             event = 'kc_farming:memberikanPupuk',
             args = {
-              entity = v[1].entity,
-              harvest = v[1].harvest,
-              watering = v[1].watering,
-              fertilizer = v[1].fertilizer,
-              time = v[1].time
+              entity = k,
+              harvest = v.harvest,
+              watering = v.watering,
+              fertilizer = v.fertilizer,
+              time = v.time
             }
           },
           {
-            title = 'Menyiram',
+            title = _K('watering'),
             icon = 'shower',
-            description = 'Penyiraman '..math.floor(v[1].watering)..'%',
+            description = _K('watering_progress', math.floor(v.watering)..'%'),
+            progress = math.floor(v.watering),
             event = 'kc_farming:wateringProgress',
             args = {
-              entity = v[1].entity,
-              harvest = v[1].harvest,
-              watering = v[1].watering,
-              fertilizer = v[1].fertilizer,
-              time = v[1].time
+              entity = k,
+              harvest = v.harvest,
+              watering = v.watering,
+              fertilizer = v.fertilizer,
+              time = v.time
             }
           },
         }
@@ -315,176 +326,275 @@ end)
 
 RegisterNetEvent('kc_farming:wateringProgress')
 AddEventHandler('kc_farming:wateringProgress', function(data)
-  ESX.TriggerServerCallback('kc_farming:checkItem', function(hasItem)
-    if hasItem then
-      exports['mythic_progbar']:Progress({
-        duration = 5000,
-        label = 'Menyiram Tanaman',
+  ServerCallback('kc_farming:checkDurability', function(durability)
+    if durability == nil then
+      return TriggerEvent('kc_farming:notify', 'error', _K('not_enough_water'), 'ERROR', 5000)
+    end
+    if durability >= Config.WateringDurability then
+      TaskTurnPedToFaceCoord(PlayerPedId(), GetEntityCoords(data.entity), 20 * 1000)
+      Wait(1000)
+
+      local progressStatus = lib.progressBar({
+        duration = 4000,
+        label = _K('watering'),
         useWhileDead = false,
         canCancel = false,
-        controlDisables = {
-          disableMovement = true,
-          disableCarMovement = true,
-          disableMouse = false,
-          disableCombat = true,
+        disable = {
+          car = true,
+          move = true,
+          combat = true
         },
-        animation = {
-          animDict = "timetable@gardener@filling_can",
-          anim = "gar_ig_5_filling_can",
+        anim = {
+          dict = "timetable@gardener@filling_can",
+          clip = "gar_ig_5_filling_can"
         },
         prop = {
-          model = 'prop_wateringcan',
+          model = "prop_wateringcan",
           bone = 60309,
-          coords = { x = 0.13, y = -0.05, z = 0.2 },
-          rotation = { x = 30.0, y = 220.0, z = 185.0000 },
-        },
-      }, function(status)
-        if not status then
-          TriggerServerEvent('kc_farming:removeItem', 'watering_can_full', 1)
-          for k, v in pairs(Seeds) do
-            if data.entity == v[1].entity then
-              v[1].watering = 100
-            end
+          pos = { x = 0.13, y = -0.05, z = 0.2 },
+          rot = { x = 30.0, y = 220.0, z = 185.0000 },
+        }
+      })
+
+      if progressStatus then
+        TriggerServerEvent('kc_farming:setDurability', 'watering_can', durability - Config.WateringDurability)
+        for k, v in pairs(Seeds) do
+          if data.entity == k then
+            v.watering = 100
           end
         end
-      end)
+      end
     else
-      TriggerEvent('kc_farming:notify', 'error', 'Kamu tidak mempunyai KALENG AIR TERISI', 'ERROR', 5000)
+      TriggerEvent('kc_farming:notify', 'error', _K('not_enough_water'), 'ERROR', 5000)
     end
-  end, 'watering_can_full', 1)
+  end, 'watering_can')
 end)
 
 RegisterNetEvent('kc_farming:memberikanPupuk')
 AddEventHandler('kc_farming:memberikanPupuk', function(data)
-  ESX.TriggerServerCallback('kc_farming:checkItem', function(hasItem)
+  ServerCallback('kc_farming:checkItem', function(hasItem)
     if hasItem then
-      exports['mythic_progbar']:Progress({
+      TaskTurnPedToFaceCoord(PlayerPedId(), GetEntityCoords(data.entity), 20 * 1000)
+      Wait(1000)
+      
+      local progressStatus = lib.progressBar({
         duration = 5000,
-        label = 'Memberikan Pupuk',
+        label = _K('give_fertilizer'),
         useWhileDead = false,
         canCancel = false,
-        controlDisables = {
-          disableMovement = true,
-          disableCarMovement = true,
-          disableMouse = false,
-          disableCombat = true,
+        disable = {
+          car = true,
+          move = true,
+          combat = true
         },
-        animation = {
-          animDict = "timetable@gardener@filling_can",
-          anim = "gar_ig_5_filling_can",
-        }
-      }, function(status)
-        if not status then
-          TriggerServerEvent('kc_farming:removeItem', 'pupuk', 1)
-          for k, v in pairs(Seeds) do
-            if data.entity == v[1].entity then
-              v[1].fertilizer = 100
-            end
+        anim = {
+          dict = "anim@amb@business@weed@weed_inspecting_lo_med_hi@",
+          clip = "weed_spraybottle_crouch_base_inspector",
+          flag = 9,
+        },
+      })
+
+      if progressStatus then
+        TriggerServerEvent('kc_farming:removeItem', 'fertilizer', 1)
+        for k, v in pairs(Seeds) do
+          if data.entity == k then
+            v.fertilizer = 100
           end
         end
-      end)
+      end
     else
-      TriggerEvent('kc_farming:notify', 'error', 'Kamu tidak mempunyai PUPUK', 'ERROR', 5000)
+      TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', 'Pupuk'), 'ERROR', 5000)
     end
-  end, 'pupuk', 1)
+  end, 'fertilizer', 1)
 end)
 
 RegisterNetEvent('kc_farming:harvest')
 AddEventHandler('kc_farming:harvest', function(data)
   if data.harvest then
     for k, v in pairs(Seeds) do
-      if v[1].entity == data.entity then
-        local label = 'Memanen '..v[1].name:gsub('bibit_', '')
-        ESX.TriggerServerCallback('kc_farming:checkItem', function(hasItem)
-          if hasItem then
-            exports['mythic_progbar']:Progress({
-              duration = 7000,
-              label = label,
-              useWhileDead = false,
-              canCancel = false,
-              controlDisables = {
-                disableMovement = true,
-                disableCarMovement = true,
-                disableMouse = false,
-                disableCombat = true,
-              },
-              animation = {
-                task = 'WORLD_HUMAN_GARDENER_PLANT'
-              }
-            }, function(status)
-              if not status then
-                Citizen.Wait(1000)
-                exports.ox_target:removeLocalEntity(data.entity, 'pupukin')
-                TriggerServerEvent('kc_farming:giveItem', Config.Items[v[1].name].get, math.random(Config.HarvestCount[1], Config.HarvestCount[2]))
-                ESX.Game.DeleteObject(data.entity)
+      if data.entity == k then
+        local label = _K('harvesting', v.name:gsub('_seeds', ''))
+        local randomHarvest = math.random(Config.HarvestCount[1], Config.HarvestCount[2])
+        ServerCallback('kc_farming:checkWeight', function(canHarvest)
+          if canHarvest then
+            ServerCallback('kc_farming:checkItem', function(hasItem)
+              if hasItem then
+                TaskTurnPedToFaceCoord(PlayerPedId(), GetEntityCoords(data.entity), 20 * 1000)
+                Wait(1000)
+
+                local progressStatus = lib.progressBar({
+                  duration = 5000,
+                  label = label,
+                  useWhileDead = false,
+                  canCancel = false,
+                  disable = {
+                    car = true,
+                    move = true,
+                    combat = true
+                  },
+                  anim = {
+                    scenario = 'WORLD_HUMAN_GARDENER_PLANT'
+                  },
+                })
+
+                if progressStatus then
+                  Citizen.Wait(1000)
+                  exports.ox_target:removeLocalEntity(data.entity, 'pupukin')
+                  TriggerServerEvent('kc_farming:giveItem', Config.Items[v.name].get, randomHarvest)
+                  table.removekey(Seeds, data.entity)
+                  TriggerServerEvent('kc_farming:saveEntity', Seeds)
+                  if DoesEntityExist(data.entity) then
+                    ESX.Game.DeleteObject(data.entity)
+                  else
+                    local entity = NetToObj(v.netIds)
+                    ESX.Game.DeleteObject(entity)
+                  end
+                end
+              else
+                TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', 'Sekop'), 'ERROR', 5000)
               end
-            end)
+            end, 'shovel', 1)
           else
-            TriggerEvent('kc_farming:notify', 'error', 'Kamu tidak mempunyai Skop')
+            TriggerEvent('kc_farming:notify', 'error', _K('inventory_full'), 'ERROR', 5000)
           end
-        end, 'sekop', 1)
+        end, Config.Items[v.name].get, randomHarvest)
       end
     end
   else
-    TriggerEvent('kc_farming:notify', 'error', 'Tanaman ini belum bisa dipanen', 'ERROR', 5000)
+    TriggerEvent('kc_farming:notify', 'error', _K('not_ready_harvest'), 'ERROR', 5000)
   end
 end)
 
+function Planting(data)
+  Citizen.CreateThread(function()
+    Citizen.Wait(1000)
+    propCount = propCount + 1
+
+    local hash = GetHashKey(Config.Items[data.seed].prop)
+    
+    RequestModel(hash)
+    while not HasModelLoaded(hash) do
+      Wait(1)
+    end
+
+    ServerCallback('kc_farming:planting', function(netId)
+      local object = NetworkGetEntityFromNetworkId(netId) 
+      if DoesEntityExist(object) then
+        PlaceObjectOnGroundProperly(object)
+        FreezeEntityPosition(object, true)
+
+        Seeds[object] = {
+          netIds = netId,
+          coords = data.coords,
+          name = data.seed,
+          harvest = false,
+          watering = 0,
+          fertilizer = 0,
+          time = 3 * 60 * 1000
+        }
+
+        exports.ox_target:addEntity(netId, {
+          {
+            name = 'pupukin',
+            icon = "fa-solid fa-clipboard",
+            label = _K('check_plant'),
+            event = 'kc_farming:checkTanaman',
+            distance = 1.5,
+            args = {
+              entity = object
+            },
+            canInteract = function(entity, distance, coords, name, bone)
+              if #(data.coords - coords) < 10 then return true end  
+            end
+          }
+        })
+        
+        TriggerServerEvent('kc_farming:saveEntity', Seeds)
+        HasPlanting(object)
+      end
+    end, hash, data.coords)
+  end)
+end
+
+function canTargetingZone(coords, hash)
+  local canPlanting = false
+  local entity = GetClosestObjectOfType(coords.x, coords.y, coords.z, 1.3, hash, false)
+  local entityCoords = GetEntityCoords(entity or PlayerPedId())
+  print(#(entityCoords-coords))
+  return (entity == 0 and #(entityCoords-coords) >= 1.3)
+end
+
+function DeleteAllPlant()
+  if Seeds then
+    TriggerServerEvent('kc_farming:deletePlant')
+    Seeds = {}
+  end
+end
+
+function table.removekey(table, key)
+   local element = table[key]
+   table[key] = nil
+   return element
+end
+
+function GetCurrentWeather()
+  local weather = GetWeatherTypeTransition()
+  local currentWeather = ""
+
+  if (weather == 1420204096) then
+    currentWeather = 'Rain'
+  elseif (weather == -1233681761) then
+    currentWeather = 'ThunderStorm'
+  end
+
+  return currentWeather
+end
+
 function HasPlanting(entity)
+  onProgress = false
   Citizen.CreateThread(function()
     local start = false
     local Sleep = 1000
     for k, v in pairs(Seeds) do
-      if v[1].entity == entity then
+      if entity == k then
         start = true
         while start do 
-          if v[1].watering > 0 or v[1].fertilizer > 0 then
-            v[1].watering = v[1].watering - 0.5
-            v[1].fertilizer = v[1].fertilizer - 0.2
+          local weather = GetCurrentWeather()
+          if weather == "Rain" or weather == "ThunderStorm" then
+            v.watering = 100
+          end
+          
+          if v.watering > 0 or v.fertilizer > 0 then
+            v.watering = v.watering - 0.5
+            v.fertilizer = v.fertilizer - 0.15
 
-            if v[1].watering < 0 or v[1].fertilizer < 0 then
-              v[1].time = v[1].time - 0
-            elseif v[1].watering < 50 or v[1].fertilizer < 50 then
-              v[1].time = v[1].time - 250
-            elseif v[1].watering < 50 and v[1].fertilizer < 50 then
-              v[1].time = v[1].time - 100
-            elseif v[1].watering > 50 and v[1].fertilizer > 50 then
-              v[1].time = v[1].time - 1000
+            if v.watering < 0 or v.fertilizer < 0 then
+              v.time = v.time - 0
+            elseif v.watering < 50 and v.fertilizer < 50 then
+              v.time = v.time - 100
+            elseif v.watering < 50 or v.fertilizer < 50 then
+              v.time = v.time - 250
+            elseif v.watering > 50 and v.fertilizer > 50 then
+              v.time = v.time - 1000
             end
           end
 
-          if v[1].watering < 0 then
-            v[1].watering = 0
-          elseif v[1].fertilizer < 0 then
-            v[1].fertilizer = 0
+          if v.watering < 0 then
+            v.watering = 0
+          elseif v.fertilizer < 0 then
+            v.fertilizer = 0
           end
 
-          if v[1].time < 0 then
-            v[1].harvest = true
+          if v.time < 0 then
+            v.harvest = true
             start = false
           end
+          TriggerServerEvent('kc_farming:saveEntity', Seeds)
           Citizen.Wait(Sleep)
         end
       end
     end
   end)
-end
-
-function SpawnProps(entity, name)
-  if DoesEntityExist(entity) then
-    ESX.Game.SpawnObject(Config.Items[name].prop, data.coords, function(object)
-      PlaceObjectOnGroundProperly(object)
-      FreezeEntityPosition(object, true)
-      exports.ox_target:addLocalEntity(object, {
-        {
-          name = 'pupukin',
-          icon = "fa-solid fa-clipboard",
-          label = 'Memeriksa Tanaman',
-          event = 'kc_farming:checkTanaman'
-        }
-      })
-    end)
-  end
 end
 
 function convertMin(ms)
@@ -502,57 +612,20 @@ function toPercent(ms)
   return math.floor(percent)
 end
 
-RegisterCommand('farming', function()
-  TriggerEvent('kc_farming:getJob')
-  -- TriggerServerEvent('kc_farming:getDataServer')
-end)
+if Config.Debug then
+  RegisterCommand('farming', function()
+    TriggerEvent('kc_farming:duty')
+  end)
 
--- RegisterCommand('debugfarming', function()
---   -- for k, v in pairs(Seeds) do
---   --   print(json.encode(v[1]))
---   -- end
-  
---       exports['mythic_progbar']:Progress({
---         duration = 5000,
---         label = 'Menyiram Tanaman',
---         useWhileDead = false,
---         canCancel = false,
---         controlDisables = {
---           disableMovement = true,
---           disableCarMovement = true,
---           disableMouse = false,
---           disableCombat = true,
---         },
---         animation = {
---           animDict = "timetable@gardener@filling_can",
---           anim = "gar_ig_5_filling_can",
---         },
---         prop = {
---           model = 'prop_wateringcan',
---           bone = 60309,
---           coords = { x = 0.13, y = -0.05, z = 0.2 },
---           rotation = { x = 30.0, y = 220.0, z = 185.0000 },
---         },
---       }, function(status)
---         -- if not status then
---         --   TriggerServerEvent('kc_farming:removeItem', 'watering_can_full', 1)
---         --   for k, v in pairs(Seeds) do
---         --     if data.entity == v[1].entity then
---         --       v[1].watering = 100
---         --     end
---         --   end
---         -- end
---       end)
--- end)
+  RegisterCommand('getData', function()
+    TriggerServerEvent('kc_farming:getDataServer')
+  end)
 
--- RegisterCommand('delplant', function()
---   if Seeds ~= nil then
---     for k, v in pairs(Seeds) do
---       ESX.Game.DeleteObject(v[1].entity)
---     end
---   else
---     local playerCoords = GetEntityCoords(PlayerPedId())
---     local prop = ESX.Game.GetClosestObject(playerCoords)
---     ESX.Game.DeleteObject(prop)
---   end
--- end)
+  RegisterCommand('printfarming', function()
+    print(json.encode(Seeds, {indent=true}))
+  end)
+
+  RegisterCommand('delplant', function()
+    DeleteAllPlant()
+  end)
+end
