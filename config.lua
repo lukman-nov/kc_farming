@@ -2,8 +2,11 @@ Config                 		= {}
 Config.Locale          		= 'id'
 Config.Notify 				 		= 'okokNotify' -- use 'mythic_notify', 'okokNotify', 'lib' or 'default' (default framework)
 Config.HarvestCount 	 		= {25, 35}
-Config.WateringDurability = 5
-Config.Debug 							= false
+Config.HarvestTime				= 1 -- waktu panen (menit)
+Config.WateringTime				= 0.5 -- mengurangi air perdetik semakin besar angkanya semakin harus sering disiram
+Config.FertilizerTime			= 0.15 -- mengurangi pupuk perdetik semakin besar angkanya semakin harus sering dikasih pupuk
+Config.WateringDurability = 5 -- penggunaan air
+Config.Debug 							= true
 Config.CheckForUpdates		= true
 
 Config.Shops = {

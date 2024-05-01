@@ -1,6 +1,7 @@
 if GetResourceState('ox_inventory') ~= 'started' then return end
 local inventory = exports.ox_inventory
 local playerPlant = {}
+local inSideZone = false
 
 CreateThread(function()
   for k, v in pairs(Config.Shops) do
@@ -59,8 +60,8 @@ end)
 RegisterCallback('kc_farming:checkDurability', function(source, cb, itemName)
   local itemSlot = inventory:GetSlotsWithItem(source, itemName)
   if itemSlot[1].metadata then
-    if itemSlot.metadata.durability then
-      cb(itemSlot.metadata.durability)
+    if itemSlot[1].metadata.durability then
+      cb(itemSlot[1].metadata.durability)
     else
       cb(nil)
     end
@@ -80,12 +81,12 @@ end)
 
 RegisterServerEvent('kc_farming:removeItem')
 AddEventHandler('kc_farming:removeItem', function(item, count)
-  inventory:RemoveItem(source, item, amount)
+  inventory:RemoveItem(source, item, count)
 end)
 
 RegisterServerEvent('kc_farming:giveItem')
 AddEventHandler('kc_farming:giveItem', function(item, count)
-  inventory:AddItem(source, item, amount)
+  inventory:AddItem(source, item, count)
 end)
 
 RegisterServerEvent('kc_farming:saveEntity')
@@ -120,6 +121,10 @@ AddEventHandler('kc_farming:deletePlant', function()
   end
 end)
 
+RegisterNetEvent('kc_farming:deleteObject', function(objectId)
+  TriggerClientEvent('kc_farming:removeObject', -1, objectId)
+end)
+
 exports('plant', function(event, item, inventory, slot, data)
   if event == 'usingItem' then
     local ped = GetPlayerPed(inventory.id)
@@ -127,6 +132,7 @@ exports('plant', function(event, item, inventory, slot, data)
     TriggerClientEvent('kc_farming:planting', inventory.id, {
       coords = vector3(playerCoords.x, playerCoords.y, playerCoords.z -0.2),
       seed = item.name,
+      label = item.label
     })
   end
 end)

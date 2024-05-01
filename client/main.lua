@@ -1,4 +1,3 @@
-local Duty = false
 local Seeds = {}
 local propCount = 0
 local inSideZone = false
@@ -206,14 +205,9 @@ AddEventHandler('kc_farming:getWater', function()
         TriggerServerEvent('kc_farming:setDurability', 'watering_can', 100)
       end
     else
-      TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', "Kaleng Air"), 'ERROR', 5000)
+      TriggerEvent('kc_farming:notify', 'error', _K('not_have_watercan'), 'ERROR', 5000)
     end
   end, 'watering_can', 1)
-end)
-
-RegisterNetEvent('kc_farming:duty')
-AddEventHandler('kc_farming:duty', function()
-  Duty = not Duty
 end)
 
 RegisterNetEvent('kc_farming:planting')
@@ -230,7 +224,7 @@ AddEventHandler('kc_farming:planting', function(data)
         
         local progressStatus = lib.progressBar({
           duration = 5000,
-          label = _K('planting'),
+          label = _K('planting') ..' '..data.label,
           useWhileDead = false,
           canCancel = false,
           disable = {
@@ -248,7 +242,7 @@ AddEventHandler('kc_farming:planting', function(data)
           Planting(data)
         end
       else
-        TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', 'Sekop'), 'ERROR', 5000)
+        TriggerEvent('kc_farming:notify', 'error', _K('not_have_shovel'), 'ERROR', 5000)
       end
     end, 'shovel', 1)
   end)
@@ -259,11 +253,11 @@ AddEventHandler('kc_farming:checkTanaman', function(target)
   local propsList = {}
   for k, v in pairs(Seeds) do
     if target.args.entity == k or target.entity == k then
-      local label = _K('plant', v.name:gsub('_seeds', ''))
+      local label = _K('plant', v.label)
 
-      local desc = _K('progress_min', toPercent(v.time), convertMin(v.time))
+      local desc = _K('progress_min', toPercent(v.time), "%", convertMin(v.time))
       if v.time < 60000 then
-        desc = _K('progress_sec', toPercent(v.time), convertMin(v.time))
+        desc = _K('progress_sec', toPercent(v.time), "%", convertSec(v.time))
       end 
       
       if v.harvest then
@@ -292,7 +286,7 @@ AddEventHandler('kc_farming:checkTanaman', function(target)
           {
             title = _K('give_fertilizer'),
             icon = 'prescription-bottle-medical',
-            description = _K('fertilizer_progress', .math.floor(v.fertilizer)..'%'),
+            description = _K('fertilizer_progress', math.floor(v.fertilizer)..'%'),
             progress = math.floor(v.fertilizer),
             event = 'kc_farming:memberikanPupuk',
             args = {
@@ -358,6 +352,7 @@ AddEventHandler('kc_farming:wateringProgress', function(data)
 
       if progressStatus then
         TriggerServerEvent('kc_farming:setDurability', 'watering_can', durability - Config.WateringDurability)
+        ClearPedTasks(PlayerPedId())
         for k, v in pairs(Seeds) do
           if data.entity == k then
             v.watering = 100
@@ -403,7 +398,7 @@ AddEventHandler('kc_farming:memberikanPupuk', function(data)
         end
       end
     else
-      TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', 'Pupuk'), 'ERROR', 5000)
+      TriggerEvent('kc_farming:notify', 'error', _K('not_have_fertilizer'), 'ERROR', 5000)
     end
   end, 'fertilizer', 1)
 end)
@@ -413,7 +408,7 @@ AddEventHandler('kc_farming:harvest', function(data)
   if data.harvest then
     for k, v in pairs(Seeds) do
       if data.entity == k then
-        local label = _K('harvesting', v.name:gsub('_seeds', ''))
+        local label = _K('harvesting', v.label)
         local randomHarvest = math.random(Config.HarvestCount[1], Config.HarvestCount[2])
         ServerCallback('kc_farming:checkWeight', function(canHarvest)
           if canHarvest then
@@ -441,17 +436,11 @@ AddEventHandler('kc_farming:harvest', function(data)
                   Citizen.Wait(1000)
                   exports.ox_target:removeLocalEntity(data.entity, 'pupukin')
                   TriggerServerEvent('kc_farming:giveItem', Config.Items[v.name].get, randomHarvest)
-                  table.removekey(Seeds, data.entity)
                   TriggerServerEvent('kc_farming:saveEntity', Seeds)
-                  if DoesEntityExist(data.entity) then
-                    ESX.Game.DeleteObject(data.entity)
-                  else
-                    local entity = NetToObj(v.netIds)
-                    ESX.Game.DeleteObject(entity)
-                  end
+                  TriggerServerEvent('kc_farming:deleteObject', data.entity)
                 end
               else
-                TriggerEvent('kc_farming:notify', 'error', _K('not_have_item', 'Sekop'), 'ERROR', 5000)
+                TriggerEvent('kc_farming:notify', 'error', _K('not_have_shovel'), 'ERROR', 5000)
               end
             end, 'shovel', 1)
           else
@@ -463,6 +452,12 @@ AddEventHandler('kc_farming:harvest', function(data)
   else
     TriggerEvent('kc_farming:notify', 'error', _K('not_ready_harvest'), 'ERROR', 5000)
   end
+end)
+
+RegisterNetEvent('kc_farming:removeObject', function(entity)
+  NetworkRequestControlOfEntity(entity)
+  DeleteObject(entity)
+  table.removekey(Seeds, entity)
 end)
 
 function Planting(data)
@@ -484,13 +479,14 @@ function Planting(data)
         FreezeEntityPosition(object, true)
 
         Seeds[object] = {
+          label = data.label,
           netIds = netId,
           coords = data.coords,
           name = data.seed,
           harvest = false,
           watering = 0,
           fertilizer = 0,
-          time = 3 * 60 * 1000
+          time = Config.HarvestTime * 60 * 1000
         }
 
         exports.ox_target:addEntity(netId, {
@@ -520,7 +516,6 @@ function canTargetingZone(coords, hash)
   local canPlanting = false
   local entity = GetClosestObjectOfType(coords.x, coords.y, coords.z, 1.3, hash, false)
   local entityCoords = GetEntityCoords(entity or PlayerPedId())
-  print(#(entityCoords-coords))
   return (entity == 0 and #(entityCoords-coords) >= 1.3)
 end
 
@@ -568,8 +563,8 @@ function HasPlanting(entity)
             v.watering = v.watering - 0.5
             v.fertilizer = v.fertilizer - 0.15
 
-            if v.watering < 0 or v.fertilizer < 0 then
-              v.time = v.time - 0
+            if v.watering < 0 then
+              v.time = v.time
             elseif v.watering < 50 and v.fertilizer < 50 then
               v.time = v.time - 100
             elseif v.watering < 50 or v.fertilizer < 50 then
@@ -608,24 +603,16 @@ function convertSec(ms)
 end
 
 function toPercent(ms)
-  local percent = (180000 - ms) / 1800
+  local percent = (Config.HarvestTime*60000 - ms) / ((Config.HarvestTime*60000)/100)
   return math.floor(percent)
 end
 
 if Config.Debug then
-  RegisterCommand('farming', function()
-    TriggerEvent('kc_farming:duty')
-  end)
-
   RegisterCommand('getData', function()
     TriggerServerEvent('kc_farming:getDataServer')
   end)
 
   RegisterCommand('printfarming', function()
     print(json.encode(Seeds, {indent=true}))
-  end)
-
-  RegisterCommand('delplant', function()
-    DeleteAllPlant()
   end)
 end

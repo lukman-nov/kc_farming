@@ -6,7 +6,7 @@ RegisterNetEvent('esx:playerLoaded', function(xPlayer)
   PlayerData = xPlayer
   PlayerLoaded = true
   
-  TriggerServerEvent('kc_farming:getDataServer')
+  TriggerEvent('kc_farming:getDataServer')
 end)
 
 RegisterNetEvent('esx:onPlayerLogout', function()
@@ -25,6 +25,10 @@ AddEventHandler('onResourceStart', function(resourceName)
   PlayerLoaded = true
 end)
 
-function ServerCallback(name, cb, ...)
-  ESX.TriggerServerCallback(name, cb,  ...)
+function GetPlayer(source)
+  return ESX.GetPlayerFromId(source)
+end
+
+function RegisterCallback(name, cb, ...)
+  ESX.RegisterServerCallback(name, cb,  ...)
 end

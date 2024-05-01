@@ -10,7 +10,7 @@ license    	'GNU General Public License v3.0'
 shared_scripts {
 	'@ox_lib/init.lua',
   'locales.lua',
-	'locale/*.lua',
+	'locales/*.lua',
 	'config.lua',
 }
 

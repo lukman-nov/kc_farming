@@ -6,7 +6,7 @@ RegisterNetEvent('esx:playerLoaded', function(xPlayer)
   PlayerData = xPlayer
   PlayerLoaded = true
   
-  TriggerServerEvent('kc_farming:getDataServer')
+  TriggerEvent('kc_farming:getDataServer')
 end)
 
 RegisterNetEvent('esx:onPlayerLogout', function()
