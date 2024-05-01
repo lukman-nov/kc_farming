@@ -17,7 +17,8 @@ shared_scripts {
 server_scripts {
   "@mysql-async/lib/MySQL.lua",
 	'bridge/**/server.lua',
-	'server/main.lua'
+	'server/main.lua',
+	'server/update.lua'
 }
 
 client_scripts {
