@@ -1,0 +1,6 @@
+/bridge
+/client
+/locales
+/server
+config.lua
+locales.lua
